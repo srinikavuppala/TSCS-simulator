@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread Scheduling & Context Switching Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --bg:#0C0E14;--bg2:#12151E;--card:#181B27;--card-h:#1E2233;
+  --brd:#262A3A;--brd-l:#323750;--fg:#E4E5EA;--fg2:#A0A3B5;--muted:#5C6078;
+  --accent:#F59E0B;--accent-d:rgba(245,158,11,.15);--accent-h:#FBBF24;
+  --sec:#14B8A6;--sec-d:rgba(20,184,166,.15);
+  --danger:#EF4444;--danger-d:rgba(239,68,68,.15);
+  --success:#22C55E;--success-d:rgba(34,197,94,.15);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(245,158,11,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(245,158,11,.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+.mono{font-family:'JetBrains Mono',monospace;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--brd-l);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);}
+
+.glow-amber{box-shadow:0 0 20px rgba(245,158,11,.2);}
+.glow-teal{box-shadow:0 0 20px rgba(20,184,166,.2);}
+
+.algo-tab{padding:8px 18px;border-radius:8px;cursor:pointer;transition:all .2s;font-weight:500;font-size:13px;border:1px solid transparent;user-select:none;}
+.algo-tab:hover{background:var(--card-h);border-color:var(--brd-l);}
+.algo-tab.active{background:var(--accent-d);border-color:var(--accent);color:var(--accent);}
+
+.btn{padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;border:1px solid var(--brd);background:var(--card);color:var(--fg);transition:all .2s;display:inline-flex;align-items:center;gap:6px;}
+.btn:hover{background:var(--card-h);border-color:var(--brd-l);}
+.btn-accent{background:var(--accent);color:#000;border-color:var(--accent);}
+.btn-accent:hover{background:var(--accent-h);border-color:var(--accent-h);}
+.btn-danger{border-color:var(--danger);color:var(--danger);}
+.btn-danger:hover{background:var(--danger-d);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+
+.input-field{background:var(--bg2);border:1px solid var(--brd);border-radius:6px;padding:7px 10px;color:var(--fg);font-family:'JetBrains Mono',monospace;font-size:13px;width:100%;transition:border-color .2s;}
+.input-field:focus{outline:none;border-color:var(--accent);}
+.input-field::placeholder{color:var(--muted);}
+
+.card{background:var(--card);border:1px solid var(--brd);border-radius:12px;padding:16px;}
+
+.thread-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--brd);transition:all .2s;}
+.thread-chip:hover{border-color:var(--brd-l);}
+.state-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:all .3s;}
+.state-new{background:var(--muted);}
+.state-ready{background:var(--sec);animation:pulse-sec 1.5s infinite;}
+.state-running{background:var(--accent);animation:pulse-amber .8s infinite;}
+.state-completed{background:var(--success);}
+@keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
+@keyframes pulse-sec{0%,100%{box-shadow:0 0 0 0 rgba(20,184,166,.3);}50%{box-shadow:0 0 0 4px rgba(20,184,166,0);}}
+
+.gantt-container{overflow-x:auto;overflow-y:hidden;border-radius:10px;background:var(--bg2);border:1px solid var(--brd);position:relative;}
+.gantt-container canvas{display:block;}
+
+.rq-item{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid;}
+
+.metric-row{display:grid;grid-template-columns:70px 1fr 1fr 1fr;gap:4px;padding:6px 8px;border-radius:6px;font-size:13px;align-items:center;}
+.metric-row:nth-child(even){background:var(--bg2);}
+.metric-row.header{font-weight:700;color:var(--fg2);font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+.metric-best{color:var(--success);font-weight:700;}
+
+.cs-panel{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;overflow:hidden;transition:all .3s;}
+.cs-panel.hidden{max-height:0;opacity:0;padding:0;border:none;margin:0;}
+.cs-panel.visible{max-height:500px;opacity:1;}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;}
+.modal-overlay.show{opacity:1;pointer-events:all;}
+.modal-content{background:var(--card);border:1px solid var(--brd);border-radius:16px;max-width:1100px;width:95%;max-height:85vh;overflow-y:auto;transform:translateY(20px);transition:transform .3s;}
+.modal-overlay.show .modal-content{transform:translateY(0);}
+
+.preset-btn{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--brd);background:var(--bg2);color:var(--fg2);transition:all .2s;}
+.preset-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-d);}
+
+.range-input{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;background:var(--brd);outline:none;}
+.range-input::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--card);border:1px solid var(--brd);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:500;z-index:200;transition:transform .3s;display:flex;align-items:center;gap:8px;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+@media(max-width:900px){
+  .main-grid{grid-template-columns:1fr !important;}
+  .sidebar{max-height:300px;overflow-y:auto;}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:0.01ms !important;transition-duration:0.01ms !important;}
+}
+</style>
+</head>
+<body>
+<!-- Toast -->
+<div id="toast" class="toast"><i class="fa-solid fa-circle-info" style="color:var(--accent)"></i><span id="toastMsg"></span></div>
+
+<!-- Header -->
+<header class="relative z-10 border-b" style="border-color:var(--brd);background:var(--bg2);">
+  <div class="max-w-[1440px] mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:var(--accent-d);border:1px solid var(--accent);">
+        <i class="fa-solid fa-microchip" style="color:var(--accent);font-size:16px;"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold leading-tight" style="letter-spacing:-.3px;">Thread Scheduling Simulator</h1>
+        <p class="text-xs" style="color:var(--muted);">Context Switching Visualization</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="algo-tab active" data-algo="rr" onclick="selectAlgorithm('rr')">Round Robin</div>
+      <div class="algo-tab" data-algo="fcfs" onclick="selectAlgorithm('fcfs')">FCFS</div>
+      <div class="algo-tab" data-algo="sjf" onclick="selectAlgorithm('sjf')">SJF</div>
+      <div class="algo-tab" data-algo="priority" onclick="selectAlgorithm('priority')">Priority</div>
+      <div style="width:1px;height:24px;background:var(--brd);margin:0 4px;"></div>
+      <div class="btn" onclick="openComparison()"><i class="fa-solid fa-chart-bar"></i> Compare All</div>
+    </div>
+  </div>
+</header>
+
+<!-- Main Layout -->
+<main class="relative z-10 max-w-[1440px] mx-auto p-4">
+  <div class="main-grid grid gap-4" style="grid-template-columns:280px 1fr;">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar flex flex-col gap-3">
+      <!-- Add Thread -->
+      <div class="card">
+        <h2 class="text-sm font-bold mb-3 flex items-center gap-2"><i class="fa-solid fa-plus-circle" style="color:var(--accent);"></i> Add Thread</h2>
+        <div class="grid gap-2">
+          <div>
+            <label class="text-xs font-medium mb-1 block" style="color:var(--fg2);">Arrival Time</label>
+            <input type="number" id="inpAT" class="input-field" placeholder="0" min="0" value="0">
+          </div>
+          <div>
+            <label class="text-xs font-medium mb-1 block" style="color:var(--fg2);">Burst Time</label>
+            <input type="number" id="inpBT" class="input-field" placeholder="4" min="1" value="4">
+          </div>
+          <div id="priorityRow">
+            <label class="text-xs font-medium mb-1 block" style="color:var(--fg2);">Priority (lower = higher)</label>
+            <input type="number" id="inpPR" class="input-field" placeholder="1" min="1" value="1">
+          </div>
+          <button class="btn btn-accent w-full justify-center mt-1" onclick="addThread()"><i class="fa-solid fa-plus"></i> Add Thread</button>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="card">
+        <h2 class="text-sm font-bold mb-3 flex items-center gap-2"><i class="fa-solid fa-bookmark" style="color:var(--sec);"></i> Presets</h2>
+        <div class="flex gap-2 flex-wrap">
+          <button class="preset-btn" onclick="loadPreset('basic')">Basic (2)</button>
+          <button class="preset-btn" onclick="loadPreset('medium')">Medium (4)</button>
+          <button class="preset-btn" onclick="loadPreset('complex')">Complex (5)</button>
+        </div>
+      </div>
+
+      <!-- Thread List -->
+      <div class="card flex-1" style="min-height:120px;">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-list" style="color:var(--sec);"></i> Threads</h2>
+          <button class="btn btn-sm btn-danger" onclick="clearThreads()"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div id="threadList" class="flex flex-col gap-2"></div>
+        <div id="emptyState" class="text-center py-6">
+          <i class="fa-solid fa-inbox text-2xl mb-2" style="color:var(--muted);"></i>
+          <p class="text-xs" style="color:var(--muted);">No threads added yet</p>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="card">
+        <h2 class="text-xs font-bold mb-2" style="color:var(--fg2);">LEGEND</h2>
+        <div class="grid gap-1 text-xs" style="color:var(--fg2);">
+          <div class="flex items-center gap-2"><span class="state-dot state-new"></span> New</div>
+          <div class="flex items-center gap-2"><span class="state-dot state-ready"></span> Ready</div>
+          <div class="flex items-center gap-2"><span class="state-dot state-running"></span> Running</div>
+          <div class="flex items-center gap-2"><span class="state-dot state-completed"></span> Completed</div>
+          <div class="flex items-center gap-2 mt-1"><span style="width:12px;height:12px;border-radius:2px;background:var(--danger);opacity:.4;display:inline-block;"></span> Context Switch</div>
+          <div class="flex items-center gap-2"><span style="width:12px;height:12px;border-radius:2px;background:#1F2937;display:inline-block;border:1px solid var(--brd);"></span> Idle</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <div class="flex flex-col gap-3">
+      <!-- Controls -->
+      <div class="card flex items-center gap-4 flex-wrap">
+        <div id="quantumControl" class="flex items-center gap-2">
+          <label class="text-xs font-semibold" style="color:var(--fg2);">Time Quantum</label>
+          <input type="range" id="quantumSlider" class="range-input" style="width:100px;" min="1" max="10" value="2">
+          <span id="quantumVal" class="mono text-sm font-bold" style="color:var(--accent);min-width:20px;">2</span>
+        </div>
+        <div style="width:1px;height:24px;background:var(--brd);"></div>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-semibold" style="color:var(--fg2);">Speed</label>
+          <input type="range" id="speedSlider" class="range-input" style="width:80px;" min="1" max="10" value="5">
+          <span id="speedVal" class="mono text-xs" style="color:var(--fg2);">5x</span>
+        </div>
+        <div style="width:1px;height:24px;background:var(--brd);"></div>
+        <div class="flex items-center gap-2 ml-auto">
+          <button id="btnStep" class="btn" onclick="stepAnimation()"><i class="fa-solid fa-forward-step"></i> Step</button>
+          <button id="btnPlay" class="btn btn-accent" onclick="togglePlay()"><i class="fa-solid fa-play" id="playIcon"></i> <span id="playLabel">Play</span></button>
+          <button class="btn" onclick="resetAnimation()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+        </div>
+      </div>
+
+      <!-- Gantt Chart -->
+      <div class="card" style="padding:12px;">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-chart-gantt" style="color:var(--accent);"></i> Gantt Chart</h2>
+          <span id="timeIndicator" class="mono text-xs" style="color:var(--muted);">Time: --</span>
+        </div>
+        <div class="gantt-container" id="ganttContainer" style="height:110px;">
+          <canvas id="ganttCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Context Switch Detail -->
+      <div id="csPanel" class="cs-panel hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--brd);">
+          <h3 class="text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-arrows-rotate" style="color:var(--danger);"></i> Context Switch Detail</h3>
+        </div>
+        <div id="csContent" style="padding:12px 16px;"></div>
+      </div>
+
+      <!-- Bottom Panels -->
+      <div class="grid gap-3" style="grid-template-columns:1fr 1fr;">
+        <!-- Ready Queue -->
+        <div class="card">
+          <h2 class="text-xs font-bold mb-3 flex items-center gap-2" style="color:var(--fg2);"><i class="fa-solid fa-layer-group" style="color:var(--sec);"></i> READY QUEUE</h2>
+          <div id="readyQueue" class="flex flex-wrap gap-2 min-h-[32px]">
+            <span class="text-xs" style="color:var(--muted);">Empty</span>
+          </div>
+        </div>
+
+        <!-- Thread States -->
+        <div class="card">
+          <h2 class="text-xs font-bold mb-3 flex items-center gap-2" style="color:var(--fg2);"><i class="fa-solid fa-circle-nodes" style="color:var(--accent);"></i> THREAD STATES</h2>
+          <div id="threadStates" class="flex flex-wrap gap-2 min-h-[32px]">
+            <span class="text-xs" style="color:var(--muted);">No threads</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="card">
+        <h2 class="text-sm font-bold mb-3 flex items-center gap-2"><i class="fa-solid fa-chart-line" style="color:var(--accent);"></i> Performance Metrics</h2>
+        <div id="metricsTable">
+          <div class="metric-row header"><span>Thread</span><span>Waiting</span><span>Turnaround</span><span>Completion</span></div>
+          <div class="text-center py-4 text-xs" style="color:var(--muted);">Run simulation to see metrics</div>
+        </div>
+        <div id="summaryMetrics" class="mt-3 pt-3 flex gap-4 flex-wrap" style="border-top:1px solid var(--brd);display:none;">
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Comparison Modal -->
+<div id="compModal" class="modal-overlay" onclick="if(event.target===this)closeComparison()">
+  <div class="modal-content" style="padding:24px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-scale-balanced" style="color:var(--accent);"></i> Algorithm Comparison</h2>
+      <button class="btn btn-sm" onclick="closeComparison()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="compContent" class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));"></div>
+    <div id="compSummary" class="mt-4"></div>
+  </div>
+</div>
+
+<script>
+/* ========== CONSTANTS ========== */
+const THREAD_COLORS = ['#F59E0B','#14B8A6','#EC4899','#8B5CF6','#22C55E','#F97316','#06B6D4','#E11D48','#A855F7','#EAB308'];
+const CS_OVERHEAD = 1;
+const PRESETS = {
+  basic: [{at:0,bt:5,pr:1},{at:1,bt:3,pr:2}],
+  medium: [{at:0,bt:5,pr:2},{at:1,bt:3,pr:1},{at:2,bt:4,pr:3},{at:3,bt:2,pr:4}],
+  complex: [{at:0,bt:8,pr:3},{at:1,bt:4,pr:1},{at:2,bt:6,pr:4},{at:3,bt:2,pr:2},{at:5,bt:3,pr:5}]
+};
+
+/* ========== STATE ========== */
+let threads = [];
+let threadCounter = 0;
+let threadContexts = {};
+let currentAlgo = 'rr';
+let timeQuantum = 2;
+let animSpeed = 5;
+let ganttEntries = null;
+let entryIndex = -1;
+let isPlaying = false;
+let playTimer = null;
+let threadStates = {};
+
+/* ========== UTILITIES ========== */
+function getThreadColor(id) {
+  const idx = threads.findIndex(t => t.id === id);
+  return THREAD_COLORS[idx % THREAD_COLORS.length];
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, Math.max(0.01, w / 2), Math.max(0.01, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function createThreadContext(id) {
+  const n = parseInt(id.replace('T','')) || 1;
+  return { PC: n*137, R0:(n*37)%256, R1:(n*53)%256, R2:(n*71)%256, R3:(n*97)%256, SP:0xFF00-n*0x100, FLAGS:(n*13)%16 };
+}
+
+/* ========== THREAD MANAGEMENT ========== */
+function addThread() {
+  const at = parseInt(document.getElementById('inpAT').value) || 0;
+  const bt = parseInt(document.getElementById('inpBT').value);
+  const pr = parseInt(document.getElementById('inpPR').value) || 1;
+  if (!bt || bt < 1) { showToast('Burst time must be at least 1'); return; }
+  if (at < 0) { showToast('Arrival time cannot be negative'); return; }
+  if (threads.length >= 10) { showToast('Maximum 10 threads allowed'); return; }
+  threadCounter++;
+  const id = 'T' + threadCounter;
+  threads.push({ id, arrivalTime: Math.max(0, at), burstTime: bt, priority: Math.max(1, pr) });
+  threadContexts[id] = createThreadContext(id);
+  resetAnimation();
+  renderThreadList();
+  showToast(`Thread ${id} added`);
+}
+
+function removeThread(id) {
+  threads = threads.filter(t => t.id !== id);
+  delete threadContexts[id];
+  resetAnimation();
+  renderThreadList();
+}
+
+function clearThreads() {
+  threads = [];
+  threadContexts = {};
+  threadCounter = 0;
+  resetAnimation();
+  renderThreadList();
+}
+
+function loadPreset(name) {
+  threads = [];
+  threadContexts = {};
+  threadCounter = 0;
+  PRESETS[name].forEach(p => {
+    threadCounter++;
+    const id = 'T' + threadCounter;
+    threads.push({ id, arrivalTime: p.at, burstTime: p.bt, priority: p.pr });
+    threadContexts[id] = createThreadContext(id);
+  });
+  resetAnimation();
+  renderThreadList();
+  showToast(`Loaded "${name}" preset`);
+}
+
+function renderThreadList() {
+  const list = document.getElementById('threadList');
+  const empty = document.getElementById('emptyState');
+  if (threads.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = threads.map(t => {
+    const c = getThreadColor(t.id);
+    const st = threadStates[t.id] || 'new';
+    return `<div class="thread-chip">
+      <span class="state-dot state-${st}"></span>
+      <span style="width:10px;height:10px;border-radius:3px;background:${c};flex-shrink:0;"></span>
+      <span class="mono text-sm font-bold" style="min-width:24px;">${t.id}</span>
+      <span class="text-xs" style="color:var(--fg2);">AT:${t.arrivalTime}</span>
+      <span class="text-xs" style="color:var(--fg2);">BT:${t.burstTime}</span>
+      ${currentAlgo==='priority'?`<span class="text-xs" style="color:var(--fg2);">P:${t.priority}</span>`:''}
+      <button class="ml-auto text-xs" style="color:var(--muted);cursor:pointer;background:none;border:none;" onclick="removeThread('${t.id}')"><i class="fa-solid fa-xmark"></i></button>
+    </div>`;
+  }).join('');
+}
+
+/* ========== ALGORITHM SELECTION ========== */
+function selectAlgorithm(algo) {
+  currentAlgo = algo;
+  document.querySelectorAll('.algo-tab').forEach(t => t.classList.toggle('active', t.dataset.algo === algo));
+  document.getElementById('priorityRow').style.display = algo === 'priority' ? 'block' : 'none';
+  document.getElementById('quantumControl').style.display = algo === 'rr' ? 'flex' : 'none';
+  resetAnimation();
+  renderThreadList();
+}
+
+/* ========== SCHEDULING ALGORITHMS ========== */
+function scheduleFCFS(inputThreads) {
+  const entries = [];
+  const sorted = [...inputThreads].sort((a, b) => a.arrivalTime - b.arrivalTime || a.id.localeCompare(b.id));
+  let time = 0;
+  let first = true;
+  for (const t of sorted) {
+    if (t.arrivalTime > time) {
+      entries.push({ threadId: null, start: time, end: t.arrivalTime, type: 'idle' });
+      time = t.arrivalTime;
+    }
+    if (!first) { entries.push({ threadId: null, start: time, end: time + CS_OVERHEAD, type: 'context_switch' }); time += CS_OVERHEAD; }
+    first = false;
+    entries.push({ threadId: t.id, start: time, end: time + t.burstTime, type: 'execute' });
+    time += t.burstTime;
+  }
+  return entries;
+}
+
+function scheduleRR(inputThreads, quantum) {
+  const entries = [];
+  const rem = inputThreads.map(t => ({ ...t, remaining: t.burstTime, done: false }));
+  let time = 0;
+  const q = [];
+  let needCS = false;
+  function addArrived() {
+    for (const t of rem) {
+      if (t.arrivalTime <= time && !t.done && !q.find(x => x.id === t.id)) q.push(t);
+    }
+  }
+  while (rem.some(t => !t.done)) {
+    addArrived();
+    if (q.length === 0) {
+      const next = rem.filter(t => !t.done).sort((a, b) => a.arrivalTime - b.arrivalTime)[0];
+      if (!next) break;
+      entries.push({ threadId: null, start: time, end: next.arrivalTime, type: 'idle' });
+      time = next.arrivalTime;
+      addArrived();
+      continue;
+    }
+    const t = q.shift();
+    if (needCS) { entries.push({ threadId: null, start: time, end: time + CS_OVERHEAD, type: 'context_switch' }); time += CS_OVERHEAD; }
+    const exec = Math.min(quantum, t.remaining);
+    entries.push({ threadId: t.id, start: time, end: time + exec, type: 'execute' });
+    time += exec;
+    t.remaining -= exec;
+    addArrived();
+    if (t.remaining <= 0) { t.done = true; needCS = q.length > 0; }
+    else { needCS = q.length > 0; q.push(t); }
+  }
+  return entries;
+}
+
+function scheduleSJF(inputThreads) {
+  const entries = [];
+  const rem = inputThreads.map(t => ({ ...t, done: false }));
+  let time = 0;
+  let first = true;
+  while (rem.some(t => !t.done)) {
+    const ready = rem.filter(t => t.arrivalTime <= time && !t.done);
+    if (ready.length === 0) {
+      const next = rem.filter(t => !t.done).sort((a, b) => a.arrivalTime - b.arrivalTime)[0];
+      if (!next) break;
+      entries.push({ threadId: null, start: time, end: next.arrivalTime, type: 'idle' });
+      time = next.arrivalTime;
+      continue;
+    }
+    ready.sort((a, b) => a.burstTime - b.burstTime || a.arrivalTime - b.arrivalTime);
+    const t = ready[0];
+    if (!first) { entries.push({ threadId: null, start: time, end: time + CS_OVERHEAD, type: 'context_switch' }); time += CS_OVERHEAD; }
+    first = false;
+    entries.push({ threadId: t.id, start: time, end: time + t.burstTime, type: 'execute' });
+    time += t.burstTime;
+    t.done = true;
+  }
+  return entries;
+}
+
+function schedulePriority(inputThreads) {
+  const entries = [];
+  const rem = inputThreads.map(t => ({ ...t, done: false }));
+  let time = 0;
+  let first = true;
+  while (rem.some(t => !t.done)) {
+    const ready = rem.filter(t => t.arrivalTime <= time && !t.done);
+    if (ready.length === 0) {
+      const next = rem.filter(t => !t.done).sort((a, b) => a.arrivalTime - b.arrivalTime)[0];
+      if (!next) break;
+      entries.push({ threadId: null, start: time, end: next.arrivalTime, type: 'idle' });
+      time = next.arrivalTime;
+      continue;
+    }
+    ready.sort((a, b) => a.priority - b.priority || a.arrivalTime - b.arrivalTime);
+    const t = ready[0];
+    if (!first) { entries.push({ threadId: null, start: time, end: time + CS_OVERHEAD, type: 'context_switch' }); time += CS_OVERHEAD; }
+    first = false;
+    entries.push({ threadId: t.id, start: time, end: time + t.burstTime, type: 'execute' });
+    time += t.burstTime;
+    t.done = true;
+  }
+  return entries;
+}
+
+function computeSchedule(algo, inputThreads, quantum) {
+  switch (algo) {
+    case 'fcfs': return scheduleFCFS(inputThreads);
+    case 'rr': return scheduleRR(inputThreads, quantum);
+    case 'sjf': return scheduleSJF(inputThreads);
+    case 'priority': return schedulePriority(inputThreads);
+    default: return scheduleRR(inputThreads, quantum);
+  }
+}
+
+/* ========== METRICS ========== */
+function calcMetrics(inputThreads, entries) {
+  const ct = {};
+  entries.filter(e => e.type === 'execute').forEach(e => { ct[e.threadId] = e.end; });
+  const perThread = inputThreads.map(t => {
+    const c = ct[t.id] || 0;
+    const tat = c - t.arrivalTime;
+    const wt = tat - t.burstTime;
+    return { id: t.id, at: t.arrivalTime, bt: t.burstTime, ct: c, tat, wt };
+  });
+  const avgWT = perThread.reduce((s, m) => s + m.wt, 0) / (perThread.length || 1);
+  const avgTAT = perThread.reduce((s, m) => s + m.tat, 0) / (perThread.length || 1);
+  const cs = entries.filter(e => e.type === 'context_switch').length;
+  const total = entries.length > 0 ? entries[entries.length - 1].end : 0;
+  const cpu = entries.filter(e => e.type === 'execute').reduce((s, e) => s + (e.end - e.start), 0);
+  const util = total > 0 ? (cpu / total * 100) : 0;
+  return { perThread, avgWT, avgTAT, cs, total, cpu, util };
+}
+
+/* ========== CANVAS RENDERING ========== */
+function drawGantt(canvas, entries, highlightIdx) {
+  const dpr = window.devicePixelRatio || 1;
+  const container = canvas.parentElement;
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  canvas.width = cw * dpr;
+  canvas.height = ch * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cw, ch);
+
+  if (!entries || entries.length === 0) {
+    ctx.fillStyle = '#5C6078';
+    ctx.font = '13px Space Grotesk';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Add threads and press Play or Step to visualize', cw / 2, ch / 2);
+    return;
+  }
+
+  const totalTime = entries[entries.length - 1].end;
+  const padL = 10, padR = 10, padTop = 12, padBot = 28;
+  const chartH = ch - padTop - padBot;
+  const minBW = 32;
+  let bw = (cw - padL - padR) / totalTime;
+  const needsScroll = bw < minBW;
+  if (needsScroll) bw = minBW;
+  const totalW = padL + bw * totalTime + padR;
+  canvas.style.width = Math.max(cw, totalW) + 'px';
+  canvas.width = Math.max(cw, totalW) * dpr;
+  canvas.height = ch * dpr;
+  ctx.scale(dpr, dpr);
+  const drawW = Math.max(cw, totalW);
+
+  let x = padL;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const w = Math.max(1, (e.end - e.start) * bw);
+    const isHL = i === highlightIdx;
+
+    if (e.type === 'execute') {
+      const col = getThreadColor(e.threadId);
+      if (isHL) { ctx.shadowColor = col; ctx.shadowBlur = 16; }
+      ctx.fillStyle = col;
+      roundRect(ctx, x, padTop, w, chartH, 5);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      if (isHL) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        roundRect(ctx, x, padTop, w, chartH, 5);
+        ctx.stroke();
+      }
+      if (w > 18) {
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 11px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(e.threadId, x + w / 2, padTop + chartH / 2);
+      }
+    } else if (e.type === 'context_switch') {
+      ctx.fillStyle = 'rgba(239,68,68,0.2)';
+      roundRect(ctx, x, padTop, w, chartH, 3);
+      ctx.fill();
+      ctx.strokeStyle = isHL ? '#EF4444' : 'rgba(239,68,68,0.5)';
+      ctx.lineWidth = isHL ? 2 : 1;
+      ctx.setLineDash([3, 3]);
+      roundRect(ctx, x, padTop, w, chartH, 3);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (w > 14) {
+        ctx.fillStyle = '#EF4444';
+        ctx.font = '9px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('CS', x + w / 2, padTop + chartH / 2);
+      }
+    } else if (e.type === 'idle') {
+      ctx.fillStyle = '#1A1D27';
+      ctx.strokeStyle = '#262A3A';
+      ctx.lineWidth = 1;
+      roundRect(ctx, x, padTop, w, chartH, 4);
+      ctx.fill();
+      roundRect(ctx, x, padTop, w, chartH, 4);
+      ctx.stroke();
+      if (w > 22) {
+        ctx.fillStyle = '#5C6078';
+        ctx.font = '9px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Idle', x + w / 2, padTop + chartH / 2);
+      }
+    }
+    x += w;
+  }
+
+  /* Time axis */
+  ctx.fillStyle = '#5C6078';
+  ctx.font = '10px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const tickInterval = bw < 20 ? Math.ceil(20 / bw) : 1;
+  for (let t = 0; t <= totalTime; t += tickInterval) {
+    const tx = padL + t * bw;
+    ctx.strokeStyle = '#262A3A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(tx, padTop + chartH + 2);
+    ctx.lineTo(tx, padTop + chartH + 7);
+    ctx.stroke();
+    ctx.fillText(t.toString(), tx, padTop + chartH + 10);
+  }
+
+  /* Current time indicator */
+  if (highlightIdx >= 0 && highlightIdx < entries.length) {
+    const e = entries[highlightIdx];
+    const tx = padL + e.end * bw;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx, padTop - 4);
+    ctx.lineTo(tx, padTop + chartH + 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(tx - 4, padTop - 4);
+    ctx.lineTo(tx + 4, padTop - 4);
+    ctx.lineTo(tx, padTop);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/* ========== THREAD STATE TRACKING ========== */
+function computeThreadStatesAt(inputThreads, entries, upToIdx) {
+  const ct = {};
+  const visibleEntries = entries.slice(0, upToIdx + 1);
+  visibleEntries.filter(e => e.type === 'execute').forEach(e => { ct[e.threadId] = e.end; });
+  const states = {};
+  const currentTime = upToIdx >= 0 ? entries[upToIdx].end : 0;
+  const runningId = upToIdx >= 0 && entries[upToIdx].type === 'execute' ? entries[upToIdx].threadId : null;
+
+  inputThreads.forEach(t => {
+    if (ct[t.id] !== undefined && currentTime >= ct[t.id]) {
+      states[t.id] = 'completed';
+    } else if (t.arrivalTime > currentTime) {
+      states[t.id] = 'new';
+    } else if (t.id === runningId) {
+      states[t.id] = 'running';
+    } else {
+      states[t.id] = 'ready';
+    }
+  });
+  return states;
+}
+
+function getReadyQueueAt(inputThreads, entries, upToIdx) {
+  const states = computeThreadStatesAt(inputThreads, entries, upToIdx);
+  return inputThreads.filter(t => states[t.id] === 'ready').map(t => t.id);
+}
+
+/* ========== CONTEXT SWITCH DETAIL ========== */
+function showCSDetail(entries, idx) {
+  const panel = document.getElementById('csPanel');
+  const content = document.getElementById('csContent');
+  if (idx < 0 || idx >= entries.length || entries[idx].type !== 'context_switch') {
+    panel.classList.remove('visible');
+    panel.classList.add('hidden');
+    return;
+  }
+  const fromId = idx > 0 ? entries[idx - 1].threadId : null;
+  const toId = idx < entries.length - 1 ? entries[idx + 1].threadId : null;
+  const fromCtx = fromId ? threadContexts[fromId] : null;
+  const toCtx = toId ? threadContexts[toId] : null;
+
+  let html = `<div class="flex items-center gap-3 mb-3">
+    <span class="mono text-sm font-bold" style="color:${fromId ? getThreadColor(fromId) : 'var(--muted)'}">${fromId || 'None'}</span>
+    <i class="fa-solid fa-arrow-right" style="color:var(--danger);"></i>
+    <span class="mono text-sm font-bold" style="color:${toId ? getThreadColor(toId) : 'var(--muted)'}">${toId || 'None'}</span>
+    <span class="text-xs ml-auto" style="color:var(--muted);">Overhead: ${CS_OVERHEAD} time unit</span>
+  </div>`;
+
+  if (fromCtx) {
+    html += `<div class="mb-2"><div class="text-xs font-bold mb-1" style="color:var(--danger);">SAVING ${fromId} STATE TO PCB</div>
+    <div class="grid gap-1" style="grid-template-columns:70px 1fr 40px;font-size:11px;">`;
+    for (const [reg, val] of Object.entries(fromCtx)) {
+      const hex = typeof val === 'number' ? '0x' + val.toString(16).toUpperCase().padStart(4, '0') : val;
+      html += `<span class="mono" style="color:var(--fg2);">${reg}</span><span class="mono" style="color:var(--fg);">${hex}</span><span style="color:var(--danger);">PCB</span>`;
+    }
+    html += `</div></div>`;
+  }
+  if (toCtx) {
+    html += `<div><div class="text-xs font-bold mb-1" style="color:var(--sec);">LOADING ${toId} STATE FROM PCB</div>
+    <div class="grid gap-1" style="grid-template-columns:70px 40px 1fr;font-size:11px;">`;
+    for (const [reg, val] of Object.entries(toCtx)) {
+      const hex = typeof val === 'number' ? '0x' + val.toString(16).toUpperCase().padStart(4, '0') : val;
+      html += `<span class="mono" style="color:var(--fg2);">${reg}</span><span style="color:var(--sec);">PCB</span><span class="mono" style="color:var(--fg);">${hex}</span>`;
+    }
+    html += `</div></div>`;
+  }
+  content.innerHTML = html;
+  panel.classList.remove('hidden');
+  panel.classList.add('visible');
+}
+
+/* ========== UI UPDATES ========== */
+function updateReadyQueueDisplay() {
+  const el = document.getElementById('readyQueue');
+  if (!ganttEntries || entryIndex < 0) {
+    el.innerHTML = '<span class="text-xs" style="color:var(--muted);">Empty</span>';
+    return;
+  }
+  const rq = getReadyQueueAt(threads, ganttEntries, entryIndex);
+  if (rq.length === 0) {
+    el.innerHTML = '<span class="text-xs" style="color:var(--muted);">Empty</span>';
+    return;
+  }
+  el.innerHTML = rq.map(id => {
+    const c = getThreadColor(id);
+    return `<span class="rq-item mono" style="background:${c}22;border-color:${c}66;color:${c};">${id}</span>`;
+  }).join('');
+}
+
+function updateThreadStatesDisplay() {
+  const el = document.getElementById('threadStates');
+  if (threads.length === 0) {
+    el.innerHTML = '<span class="text-xs" style="color:var(--muted);">No threads</span>';
+    return;
+  }
+  if (!ganttEntries || entryIndex < 0) {
+    threadStates = {};
+    threads.forEach(t => threadStates[t.id] = 'new');
+  } else {
+    threadStates = computeThreadStatesAt(threads, ganttEntries, entryIndex);
+  }
+  el.innerHTML = threads.map(t => {
+    const st = threadStates[t.id] || 'new';
+    const c = getThreadColor(t.id);
+    const labels = { new: 'New', ready: 'Ready', running: 'Running', completed: 'Done' };
+    return `<span class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium" style="background:var(--bg2);border:1px solid var(--brd);">
+      <span class="state-dot state-${st}"></span>
+      <span class="mono" style="color:${c};">${t.id}</span>
+      <span style="color:var(--fg2);">${labels[st]}</span>
+    </span>`;
+  }).join('');
+}
+
+function updateMetricsDisplay() {
+  const el = document.getElementById('metricsTable');
+  const summary = document.getElementById('summaryMetrics');
+  if (!ganttEntries || entryIndex < ganttEntries.length - 1) {
+    el.innerHTML = '<div class="metric-row header"><span>Thread</span><span>Waiting</span><span>Turnaround</span><span>Completion</span></div><div class="text-center py-4 text-xs" style="color:var(--muted);">Complete the simulation to see metrics</div>';
+    summary.style.display = 'none';
+    return;
+  }
+  const m = calcMetrics(threads, ganttEntries);
+  el.innerHTML = '<div class="metric-row header"><span>Thread</span><span>Waiting Time</span><span>Turnaround Time</span><span>Completion Time</span></div>' +
+    m.perThread.map(t => `<div class="metric-row mono">
+      <span style="color:${getThreadColor(t.id)};font-weight:700;">${t.id}</span>
+      <span>${t.wt}</span><span>${t.tat}</span><span>${t.ct}</span>
+    </div>`).join('');
+  summary.style.display = 'flex';
+  summary.innerHTML = `
+    <div class="text-center"><div class="text-xs" style="color:var(--muted);">Avg Waiting</div><div class="mono text-sm font-bold" style="color:var(--accent);">${m.avgWT.toFixed(2)}</div></div>
+    <div class="text-center"><div class="text-xs" style="color:var(--muted);">Avg Turnaround</div><div class="mono text-sm font-bold" style="color:var(--accent);">${m.avgTAT.toFixed(2)}</div></div>
+    <div class="text-center"><div class="text-xs" style="color:var(--muted);">Context Switches</div><div class="mono text-sm font-bold" style="color:var(--danger);">${m.cs}</div></div>
+    <div class="text-center"><div class="text-xs" style="color:var(--muted);">CPU Utilization</div><div class="mono text-sm font-bold" style="color:var(--success);">${m.util.toFixed(1)}%</div></div>
+    <div class="text-center"><div class="text-xs" style="color:var(--muted);">Total Time</div><div class="mono text-sm font-bold">${m.total}</div></div>
+  `;
+}
+
+function updateTimeIndicator() {
+  const el = document.getElementById('timeIndicator');
+  if (!ganttEntries || entryIndex < 0) {
+    el.textContent = 'Time: --';
+    return;
+  }
+  el.textContent = `Time: ${ganttEntries[entryIndex].end} / ${ganttEntries[ganttEntries.length - 1].end}`;
+}
+
+function updateAllDisplays() {
+  drawGantt(document.getElementById('ganttCanvas'), ganttEntries, entryIndex);
+  updateReadyQueueDisplay();
+  updateThreadStatesDisplay();
+  updateMetricsDisplay();
+  updateTimeIndicator();
+  renderThreadList();
+  if (entryIndex >= 0 && entryIndex < ganttEntries.length) {
+    showCSDetail(ganttEntries, entryIndex);
+  } else {
+    showCSDetail(ganttEntries, -1);
+  }
+}
+
+/* ========== ANIMATION ENGINE ========== */
+function ensureSchedule() {
+  if (threads.length === 0) { showToast('Add at least one thread first'); return false; }
+  if (!ganttEntries) {
+    ganttEntries = computeSchedule(currentAlgo, threads, timeQuantum);
+    if (ganttEntries.length === 0) { showToast('Could not compute schedule'); return false; }
+  }
+  return true;
+}
+
+function stepAnimation() {
+  if (!ensureSchedule()) return;
+  if (entryIndex >= ganttEntries.length - 1) return;
+  entryIndex++;
+  /* Simulate context update: if executing, advance PC */
+  const e = ganttEntries[entryIndex];
+  if (e.type === 'execute' && threadContexts[e.threadId]) {
+    const dur = e.end - e.start;
+    threadContexts[e.threadId].PC += dur * 17;
+    threadContexts[e.threadId].R0 = (threadContexts[e.threadId].R0 + dur * 3) % 256;
+  }
+  updateAllDisplays();
+}
+
+function togglePlay() {
+  if (isPlaying) {
+    pauseAnimation();
+  } else {
+    playAnimation();
+  }
+}
+
+function playAnimation() {
+  if (!ensureSchedule()) return;
+  if (entryIndex >= ganttEntries.length - 1) {
+    entryIndex = -1;
+    threadStates = {};
+    threads.forEach(t => threadStates[t.id] = 'new');
+  }
+  isPlaying = true;
+  document.getElementById('playIcon').className = 'fa-solid fa-pause';
+  document.getElementById('playLabel').textContent = 'Pause';
+  const delay = Math.max(50, 600 - animSpeed * 55);
+  playTimer = setInterval(() => {
+    if (entryIndex >= ganttEntries.length - 1) {
+      pauseAnimation();
+      return;
+    }
+    stepAnimation();
+  }, delay);
+}
+
+function pauseAnimation() {
+  isPlaying = false;
+  clearInterval(playTimer);
+  playTimer = null;
+  document.getElementById('playIcon').className = 'fa-solid fa-play';
+  document.getElementById('playLabel').textContent = 'Play';
+}
+
+function resetAnimation() {
+  pauseAnimation();
+  ganttEntries = null;
+  entryIndex = -1;
+  threadStates = {};
+  threads.forEach(t => threadStates[t.id] = 'new');
+  drawGantt(document.getElementById('ganttCanvas'), null, -1);
+  updateReadyQueueDisplay();
+  updateThreadStatesDisplay();
+  updateMetricsDisplay();
+  updateTimeIndicator();
+  showCSDetail(null, -1);
+  renderThreadList();
+}
+
+/* ========== COMPARISON MODE ========== */
+function openComparison() {
+  if (threads.length === 0) { showToast('Add threads first to compare'); return; }
+  const modal = document.getElementById('compModal');
+  const content = document.getElementById('compSummary');
+  modal.classList.add('show');
+
+  const algos = [
+    { key: 'fcfs', name: 'FCFS', desc: 'First Come First Served' },
+    { key: 'rr', name: 'Round Robin', desc: `Quantum = ${timeQuantum}` },
+    { key: 'sjf', name: 'SJF', desc: 'Shortest Job First' },
+    { key: 'priority', name: 'Priority', desc: 'Lower number = higher priority' }
+  ];
+
+  const results = algos.map(a => {
+    const entries = computeSchedule(a.key, threads, timeQuantum);
+    const metrics = calcMetrics(threads, entries);
+    return { ...a, entries, metrics };
+  });
+
+  /* Find best metrics */
+  const bestWT = Math.min(...results.map(r => r.metrics.avgWT));
+  const bestTAT = Math.min(...results.map(r => r.metrics.avgTAT));
+  const bestCS = Math.min(...results.map(r => r.metrics.cs));
+  const bestUtil = Math.max(...results.map(r => r.metrics.util));
+
+  const compContent = document.getElementById('compContent');
+  compContent.innerHTML = results.map((r, i) => {
+    const isBestWT = r.metrics.avgWT === bestWT;
+    const isBestTAT = r.metrics.avgTAT === bestTAT;
+    const isBestCS = r.metrics.cs === bestCS;
+    const isBestUtil = r.metrics.util === bestUtil;
+    return `<div class="card" style="${isBestWT || isBestTAT ? 'border-color:var(--success);' : ''}">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-bold">${r.name}</h3>
+        ${(isBestWT || isBestTAT) ? '<span class="text-xs font-bold px-2 py-0.5 rounded" style="background:var(--success-d);color:var(--success);">Best</span>' : ''}
+      </div>
+      <p class="text-xs mb-3" style="color:var(--muted);">${r.desc}</p>
+      <div class="gantt-container" style="height:70px;margin-bottom:12px;" id="compCanvas${i}"><canvas id="compC${i}"></canvas></div>
+      <div class="grid gap-1 text-xs mono">
+        <div class="flex justify-between"><span style="color:var(--fg2);">Avg Wait</span><span class="${isBestWT ? 'metric-best' : ''}">${r.metrics.avgWT.toFixed(2)}</span></div>
+        <div class="flex justify-between"><span style="color:var(--fg2);">Avg TAT</span><span class="${isBestTAT ? 'metric-best' : ''}">${r.metrics.avgTAT.toFixed(2)}</span></div>
+        <div class="flex justify-between"><span style="color:var(--fg2);">CS Count</span><span class="${isBestCS ? 'metric-best' : ''}">${r.metrics.cs}</span></div>
+        <div class="flex justify-between"><span style="color:var(--fg2);">CPU Util</span><span class="${isBestUtil ? 'metric-best' : ''}">${r.metrics.util.toFixed(1)}%</span></div>
+        <div class="flex justify-between"><span style="color:var(--fg2);">Total Time</span><span>${r.metrics.total}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  /* Draw comparison canvases after DOM update */
+  requestAnimationFrame(() => {
+    results.forEach((r, i) => {
+      drawGantt(document.getElementById('compC' + i), r.entries, r.entries.length - 1);
+    });
+  });
+
+  /* Summary table */
+  content.innerHTML = `<div class="card" style="padding:12px;">
+    <h3 class="text-sm font-bold mb-2">Per-Thread Breakdown</h3>
+    <div style="overflow-x:auto;">
+      <table class="w-full text-xs mono" style="border-collapse:collapse;">
+        <thead><tr style="color:var(--fg2);">
+          <th class="text-left py-1 px-2">Thread</th>
+          ${results.map(r => `<th class="text-center py-1 px-2">${r.name}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid var(--brd);"><td class="py-1 px-2" style="color:var(--fg2);">Waiting</td>
+            ${results.map(r => {
+              const vals = r.metrics.perThread.map(t => t.wt);
+              const min = Math.min(...results.flatMap(x => x.metrics.perThread.map(t => t.wt)));
+              return `<td class="text-center py-1 px-2">${vals.join(', ')}</td>`;
+            }).join('')}
+          </tr>
+          <tr style="border-top:1px solid var(--brd);"><td class="py-1 px-2" style="color:var(--fg2);">Turnaround</td>
+            ${results.map(r => `<td class="text-center py-1 px-2">${r.metrics.perThread.map(t => t.tat).join(', ')}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function closeComparison() {
+  document.getElementById('compModal').classList.remove('show');
+}
+
+/* ========== EVENT HANDLERS ========== */
+document.getElementById('quantumSlider').addEventListener('input', function() {
+  timeQuantum = parseInt(this.value);
+  document.getElementById('quantumVal').textContent = timeQuantum;
+  resetAnimation();
+});
+
+document.getElementById('speedSlider').addEventListener('input', function() {
+  animSpeed = parseInt(this.value);
+  document.getElementById('speedVal').textContent = animSpeed + 'x';
+  if (isPlaying) {
+    pauseAnimation();
+    playAnimation();
+  }
+});
+
+/* Enter key to add thread */
+document.querySelectorAll('.input-field').forEach(inp => {
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') addThread(); });
+});
+
+/* Resize handling */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (ganttEntries) drawGantt(document.getElementById('ganttCanvas'), ganttEntries, entryIndex);
+    else drawGantt(document.getElementById('ganttCanvas'), null, -1);
+  }, 100);
+});
+
+/* Keyboard shortcuts */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); stepAnimation(); }
+  if (e.key === 'r' || e.key === 'R') { resetAnimation(); }
+});
+
+/* ========== INITIALIZATION ========== */
+function init() {
+  selectAlgorithm('rr');
+  renderThreadList();
+  drawGantt(document.getElementById('ganttCanvas'), null, -1);
+  updateThreadStatesDisplay();
+  updateReadyQueueDisplay();
+}
+init();
+</script>
+</body>
+</html>
